@@ -1,78 +1,61 @@
 import express from 'express';
-import exphbs from 'express-handlebars';
+import { engine } from 'express-handlebars';
 import http from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import viewsRoutes from './routes/views.routes.js';
+import { ProductManager } from './ProductManager.js';
 
 const app = express();
-const port = 8080;
+const port = process.env.PORT || 8080;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-app.engine('.handlebars', exphbs({ extname: '.handlebars' }));
-app.set('view engine', '.handlebars');
+const productManager = new ProductManager();
+
+// Configurar el motor de plantillas "express-handlebars"
+const hbs = engine({
+  extname: '.hbs',
+  helpers: {
+    layout: (name, options) => {
+      const layoutPath = path.join(__dirname, 'views', 'layouts', `${name}.hbs`);
+      const layoutTemplate = fs.readFileSync(layoutPath, 'utf8');
+      return hbs.handlebars.compile(layoutTemplate)(options.data.root);
+    },
+  },
+});
+app.engine('.hbs', hbs);
+app.set('view engine', '.hbs');
 app.set('views', path.join(__dirname, 'views'));
-
 
 const server = http.createServer(app);
 const io = new Server(server);
 
 io.on('connection', (socket) => {
   console.log('Un cliente se ha conectado');
+  socket.emit('productsUpdate', productManager.getAllProducts());
 
-  const products = getProductsFromSomewhere(); 
-
-  socket.emit('productsUpdate', products);
-
-  socket.on('createProduct', (newProduct) => {
-    createNewProduct(newProduct);
-    const updatedProducts = getProductsFromSomewhere();  
-    io.emit('productsUpdate', updatedProducts);
-  });
-
-  
-  socket.on('deleteProduct', (productId) => {
-    deleteProduct(productId);
-    const updatedProducts = getProductsFromSomewhere();
-    io.emit('productsUpdate', updatedProducts);
-  });
-
-  
-  socket.on('disconnect', () => {
-    console.log('Un cliente se ha desconectado');
+  socket.on('getProducts', () => {
+    socket.emit('productsUpdate', productManager.getAllProducts());
   });
 });
 
-// Rutas
-app.get('/', async (req, res) => {
-  const products = getProductsFromSomewhere();
-  res.render('home', { products });
-});
-
-app.get('/realtimeproducts', async (req, res) => {
-  const products = getProductsFromSomewhere();
-  res.render('realTimeProducts', { products });
-});
-
+app.use('/', viewsRoutes);
 app.use(express.json());
 
 app.post('/api/products', async (req, res) => {
-  try {
-    const newProduct = req.body;
-    await createNewProduct(newProduct);
-    res.json({ status: 'success', message: 'Producto agregado exitosamente' });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Error al agregar el producto' });
-  }
+  const newProduct = req.body;
+  const product = productManager.createNewProduct(newProduct); 
+  res.json({ status: 'success', message: 'Producto agregado exitosamente', product });
 });
 
 app.delete('/api/products/:id', async (req, res) => {
-  try {
-    const productId = req.params.id;
-    await deleteProduct(productId);
-    res.json({ status: 'success', message: 'Producto eliminado exitosamente' });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Error al eliminar el producto' });
-  }
+  const productId = parseInt(req.params.id);
+  productManager.deleteProduct(productId); 
+  res.json({ status: 'success', message: 'Producto eliminado exitosamente' });
 });
 
 // Iniciar el servidor

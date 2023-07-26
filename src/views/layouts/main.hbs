@@ -7,9 +7,13 @@
   <h1>Lista de productos en tiempo real</h1>
   <ul id="products-list"></ul>
 
-  <script src=" "></script> 
+  <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io(); 
+    const socket = io();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      socket.emit('getProducts');
+    });
 
     socket.on('productsUpdate', (products) => {
       updateProductsList(products);
@@ -21,10 +25,11 @@
 
       products.forEach((product) => {
         const listItem = document.createElement('li');
-        listItem.textContent = `${product.title} - ${product.price}`;
+        listItem.textContent = `${product.name} - ${product.price}`;
         productsListElement.appendChild(listItem);
       });
     }
   </script>
 </body>
 </html>
+
